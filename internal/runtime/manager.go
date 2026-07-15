@@ -34,9 +34,9 @@ const (
 
 // ContainerInfo holds a summary of a running container.
 type ContainerInfo struct {
-	ContainerID string
-	ImageTag    string
-	Status      string
+	ContainerID string `json:"container_id"`
+	ImageTag    string `json:"image_tag"`
+	Status      string `json:"status"`
 }
 
 // Manager controls Docker containers for Stevedore-managed apps.

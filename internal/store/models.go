@@ -14,15 +14,15 @@ var ErrNotFound = errors.New("store: not found")
 
 // App represents a registered application managed by Stevedore.
 type App struct {
-	ID              string
-	Name            string
-	RepoURL         string
-	Branch          string
-	WebhookSecret   string
-	EnvFile         string // path to the env file on disk
-	HealthCheckURL  string
-	CurrentDeployID string
-	CreatedAt       time.Time
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	RepoURL         string     `json:"repo_url"`
+	Branch          string     `json:"branch"`
+	WebhookSecret   string     `json:"-"` // never serialised — treat as secret
+	EnvFile         string     `json:"env_file"`
+	HealthCheckURL  string     `json:"health_check_url"`
+	CurrentDeployID string     `json:"current_deploy_id"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 // CreateApp inserts a new app record.
@@ -103,6 +103,9 @@ func scanApp(s interface {
 		return nil, fmt.Errorf("store: scan app: %w", err)
 	}
 	a.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAt)
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	}
 	return a, nil
 }
 
@@ -121,15 +124,15 @@ const (
 
 // Deploy represents a single deploy attempt.
 type Deploy struct {
-	ID         string
-	AppID      string
-	GitSHA     string
-	ImageTag   string
-	Status     DeployStatus
-	Trigger    string // "manual" | "webhook"
-	StartedAt  time.Time
-	FinishedAt *time.Time
-	ErrorMsg   string
+	ID         string       `json:"id"`
+	AppID      string       `json:"app_id"`
+	GitSHA     string       `json:"git_sha"`
+	ImageTag   string       `json:"image_tag"`
+	Status     DeployStatus `json:"status"`
+	Trigger    string       `json:"trigger"`
+	StartedAt  time.Time    `json:"started_at"`
+	FinishedAt *time.Time   `json:"finished_at,omitempty"`
+	ErrorMsg   string       `json:"error_msg,omitempty"`
 }
 
 // CreateDeploy inserts a new deploy record with status=pending.
@@ -223,11 +226,30 @@ func scanDeploy(s interface {
 		return nil, fmt.Errorf("store: scan deploy: %w", err)
 	}
 	if startedAt.Valid {
-		d.StartedAt, _ = time.Parse("2006-01-02 15:04:05", startedAt.String)
+		d.StartedAt = parseTime(startedAt.String)
 	}
 	if finishedAt.Valid && finishedAt.String != "" {
-		t, _ := time.Parse("2006-01-02 15:04:05", finishedAt.String)
-		d.FinishedAt = &t
+		t := parseTime(finishedAt.String)
+		if !t.IsZero() {
+			d.FinishedAt = &t
+		}
 	}
 	return d, nil
 }
+
+// parseTime tries the common SQLite datetime string formats in order.
+func parseTime(s string) time.Time {
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04:05.999999999",
+		time.RFC3339,
+		time.RFC3339Nano,
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+

@@ -82,6 +82,9 @@ func (h *Handlers) listApps(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if apps == nil {
+		apps = []*store.App{} // return [] not null when empty
+	}
 	writeJSON(w, http.StatusOK, apps)
 }
 
@@ -152,6 +155,12 @@ func (h *Handlers) triggerDeploy(w http.ResponseWriter, r *http.Request) {
 	appName := appNameFromPath(r, "app")
 	if !validAppName.MatchString(appName) {
 		writeError(w, http.StatusBadRequest, "invalid app name")
+		return
+	}
+
+	// Verify app exists before enqueuing.
+	if _, err := h.deps.Store.GetApp(appName); err != nil {
+		writeError(w, http.StatusNotFound, "app not found")
 		return
 	}
 

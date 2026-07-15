@@ -33,7 +33,82 @@ See [system-plan-stevedore.md](./system-plan-stevedore.md) for full design ratio
 
 ---
 
-## Setup
+## Local Development & Testing (No VPS required)
+
+You can run and test Stevedore fully on your local machine.
+
+### 1. Set up directories
+```bash
+mkdir -p /tmp/stevedore/{logs,repos}
+```
+
+### 2. Start the Agent
+Set the environment variables and run the agent binary:
+```bash
+export AGENT_API_TOKEN="localtest123"
+export STEVEDORE_DB_PATH="/tmp/stevedore/data.db"
+export STEVEDORE_LOG_DIR="/tmp/stevedore/logs"
+export STEVEDORE_REPO_DIR="/tmp/stevedore/repos"
+export STEVEDORE_ADDR=":8080"
+
+go build -o agent ./cmd/agent
+./agent
+```
+
+### 3. Configure the CLI
+In a second terminal, build the CLI and configure it to talk to the local agent:
+```bash
+go build -o cli ./cmd/cli
+
+mkdir -p ~/.stevedore
+cat > ~/.stevedore/config <<EOF
+AGENT_URL=http://localhost:8080
+AGENT_TOKEN=localtest123
+EOF
+chmod 600 ~/.stevedore/config
+```
+
+### 4. Create a local Git repository for testing
+To test without hitting Docker Hub limits or network blocks, create a local repository using a base image you already have cached locally (e.g., `ubuntu:24.04`):
+```bash
+mkdir -p /tmp/test-repo && cd /tmp/test-repo
+git init
+git config user.email "test@test.com"
+git config user.name "Test"
+
+cat > Dockerfile << 'EOF'
+FROM ubuntu:24.04
+CMD ["bash", "-c", "echo 'Stevedore deployed this!' && sleep infinity"]
+EOF
+
+git add . && git commit -m "Initial"
+```
+
+### 5. Register and Deploy the local app
+```bash
+# Register using file:// protocol
+./cli apps register
+# App name: local-test
+# Git repo URL: file:///tmp/test-repo
+# Branch: main (rename your local branch to main first if default is master: git branch -m main)
+# Webhook / Env / Health check: press Enter to skip
+
+# Deploy
+./cli deploy local-test
+
+# Check status and copy the generated deploy ID
+./cli status local-test
+
+# Stream logs
+./cli logs local-test --deploy <deploy-id>
+```
+
+---
+
+## Production VPS Setup (Requires a VPS)
+
+> [!NOTE]
+> The automated GitHub Actions workflow (`.github/workflows/build-and-deploy.yml`) is configured to deploy to a remote VPS. Until you provision a VPS and configure the repository secrets on GitHub, the deploy step in CI will fail. The rest of the setup below applies to your future VPS host.
 
 ### 1. Create the `stevedore` system user
 

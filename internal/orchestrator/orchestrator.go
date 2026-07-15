@@ -272,10 +272,10 @@ func (o *Orchestrator) Rollback(appName string) error {
 
 // StatusResponse holds the current state of an app for the API.
 type StatusResponse struct {
-	App           *store.App
-	CurrentDeploy *store.Deploy
-	Container     *runtime.ContainerInfo
-	RecentDeploys []*store.Deploy
+	App           *store.App           `json:"app"`
+	CurrentDeploy *store.Deploy        `json:"current_deploy"`
+	Container     *runtime.ContainerInfo `json:"container"`
+	RecentDeploys []*store.Deploy      `json:"recent_deploys"`
 }
 
 // Status returns the current state of an app.
