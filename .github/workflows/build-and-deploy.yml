@@ -1,0 +1,86 @@
+name: build-and-deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Check formatting
+        run: gofmt -l . | tee /dev/stderr | (! read)
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Security scan
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Build agent binary
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o agent ./cmd/agent
+
+      - name: Build cli binary
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o cli ./cmd/cli
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: |
+            agent
+            cli
+
+  deploy:
+    name: Deploy to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    # Only deploy on push to main (not PRs).
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy new binary to VPS
+        run: |
+          chmod +x agent cli
+          scp agent ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/stevedore/agent.new
+          scp cli   ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/usr/local/bin/stevedore.new
+
+      - name: Swap binaries and restart service
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} '
+            sudo systemctl stop stevedore
+            sudo mv /opt/stevedore/agent.new /opt/stevedore/agent
+            sudo mv /usr/local/bin/stevedore.new /usr/local/bin/stevedore
+            sudo systemctl start stevedore
+          '
+
+      - name: Smoke test — agent must respond
+        run: |
+          sleep 3
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "curl -sf -H 'Authorization: Bearer ${{ secrets.AGENT_API_TOKEN }}' \
+             http://localhost:8080/apps"

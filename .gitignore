@@ -1,0 +1,17 @@
+# Binaries
+agent
+cli
+
+# Runtime data
+logs/
+*.db
+*.db-shm
+*.db-wal
+backups/
+
+# Config & secrets
+agent.env
+.stevedore/
+
+# Build artifacts
+*.test

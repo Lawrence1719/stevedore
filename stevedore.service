@@ -1,0 +1,28 @@
+[Unit]
+Description=Stevedore deploy agent
+Documentation=https://github.com/rence/stevedore
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=stevedore
+Group=stevedore
+
+ExecStart=/opt/stevedore/agent
+Restart=on-failure
+RestartSec=5
+
+# Environment / secrets — never committed to git
+EnvironmentFile=/opt/stevedore/agent.env
+
+# Logging goes to journald automatically
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stevedore
+
+# Prevent the process from gaining new privileges
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
